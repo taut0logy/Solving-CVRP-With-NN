@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 
-# Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from cvrp_training_pipeline import CVRPTrainer

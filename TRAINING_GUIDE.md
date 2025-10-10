@@ -36,13 +36,13 @@ python train_cvrp.py
 
 ```bash
 # Test your trained model on standard benchmarks, and save the visualizations
-python test_cvrp_benchmarks.py
+python test_cvrp.py
 
 # Test without saving visualizations
-python test_cvrp_benchmarks.py --no-plots
+python test_cvrp.py --no-plots
 
 # Or test on a sample instance with detailed output
-python test_cvrp_benchmarks.py --sample
+python test_cvrp.py --sample
 ```
 
 ---
@@ -185,7 +185,7 @@ model_params = {
 ### **Method 1: Sample Instance Testing**
 
 ```bash
-python test_cvrp_benchmarks.py --sample
+python test_cvrp.py --sample
 ```
 
 **Shows:**
@@ -210,7 +210,7 @@ python test_cvrp_benchmarks.py --sample
 2. **Run benchmark tests:**
 
    ```bash
-   python test_cvrp_benchmarks.py
+   python test_cvrp.py
    ```
 
 ### **Method 3: Custom Instance Testing**
@@ -310,5 +310,5 @@ Your complete CVRP neural network solution is ready. Follow these steps:
 
 1. **Start with demo:** `python demo.py`
 2. **Train full model:** `python train_cvrp.py`
-3. **Test performance:** `python test_cvrp_benchmarks.py --sample`
-4. **Benchmark validation:** Download .vrp files and run `python test_cvrp_benchmarks.py`
+3. **Test performance:** `python test_cvrp.py --sample`
+4. **Benchmark validation:** Download .vrp files and run `python test_cvrp.py`

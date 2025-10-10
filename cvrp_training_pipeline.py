@@ -5,7 +5,6 @@ import logging
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-# Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from cvrp_model import CVRPModel
@@ -680,8 +679,7 @@ class CVRPTrainer:
 
 def main():
     """Main training pipeline"""
-    
-    # Model parameters
+
     model_params = {
         'embedding_dim': 128,
         'sqrt_embedding_dim': 128 ** 0.5,
@@ -694,7 +692,6 @@ def main():
         'debug_mode': False
     }
     
-    # Training parameters
     training_params = {
         'learning_rate': 1e-4,
         'weight_decay': 1e-6,
@@ -702,28 +699,23 @@ def main():
         'lr_gamma': 0.5,
         'use_cuda': True
     }
-    
-    # Create trainer
+
     trainer = CVRPTrainer(model_params, training_params)
-    
-    # Generate training data
+
     trainer.generate_training_data(
         n_train=1000,
         n_val=100,
         n_customers=20
     )
     
-    # Train model
     print("Starting training...")
     train_losses, val_distances = trainer.train_supervised(
         epochs=50,
         batch_size=16
     )
     
-    # Save model
     trainer.save_model("cvrp_trained_model.pt")
-    
-    # Test on benchmarks
+
     benchmark_results = trainer.test_on_benchmarks("benchmark_data")
     
     print("\nBenchmark Results:")

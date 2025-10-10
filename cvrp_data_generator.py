@@ -337,10 +337,8 @@ class CVRPDataGenerator:
 
 
 if __name__ == "__main__":
-    # Example usage
     generator = CVRPDataGenerator()
     
-    # Generate a small dataset
     dataset = generator.generate_dataset(
         n_instances=10,
         n_customers=20,
@@ -348,7 +346,6 @@ if __name__ == "__main__":
         demand_range=(5, 15)
     )
     
-    # Visualize first instance
     if dataset:
         print("\nExample instance:")
         print(f"  Depot: {dataset[0].depot_xy}")
@@ -358,8 +355,6 @@ if __name__ == "__main__":
         print(f"  Routes: {dataset[0].optimal_routes}")
         print(f"  Distance: {dataset[0].optimal_distance:.2f}")
         
-        # Uncomment to visualize
         # generator.visualize_instance(dataset[0])
         
-        # Save dataset
         generator.save_dataset(dataset, "cvrp_training_data.pt")

@@ -344,10 +344,10 @@ python train_cvrp.py
 
 ```bash
 # Test on provided benchmark instances
-python test_cvrp_benchmarks.py
+python test_cvrp.py
 
 # Test on sample generated instance
-python test_cvrp_benchmarks.py --sample
+python test_cvrp.py --sample
 ```
 
 ### Loading Specific Checkpoints
@@ -411,15 +411,15 @@ Based on our experiments with 20-customer instances:
 
 ### Benchmark Performance
 
-Tested on four standard VRPLIB instances (results from `test_cvrp_benchmarks.py`):
+Tested on four standard VRPLIB instances (results from `test_cvrp.py`):
 
 | Instance | Customers | Optimal Routes | Predicted Routes | Gap | Performance |
 |----------|-----------:|---------------:|-----------------:|-----:|-------------|
-| X-n120-k6  | 120 | 6  | 9  | -67.15% | Much better (lower distance) |
-| X-n125-k30 | 125 | 30 | 35 | -22.49% | Better |
-| X-n153-k22 | 153 | 23 | 33 | -47.78% | Much better |
-| X-n157-k13 | 157 | 13 | 22 | -55.99% | Much better |
-| **Average** | -   | -  | -  | **-48.35%** | **Excellent** |
+| X-n120-k6 | 120 | 6 | 7 | -73.15% | Much better (lower distance) |
+| X-n125-k30 | 125 | 30 | 34 | -9.12% | Good |
+| X-n153-k22 | 153 | 23 | 29 | -50.99% | Much better (lower distance) |
+| X-n157-k13 | 157 | 13 | 24 | -52.48% | Much better (lower distance) |
+| **Average** | - | - | - | **-46.44%** | **Excellent** |
 
 ### Key Insights
 
@@ -493,7 +493,7 @@ VRPB/
 ├── cvrp_data_generator.py        # Dataset generation and traditional solver
 ├── cvrp_benchmark_parser.py      # VRPLIB format support
 ├── train_cvrp.py                 # Main training script
-├── test_cvrp_benchmarks.py       # Benchmark testing script
+├── test_cvrp.py                  # Benchmark testing script
 ├── demo.py                       # Demo script for showing the training process
 ├── trained_model/                # Model checkpoints directory
 │   ├── checkpoint-1.pt           # Epoch 1 checkpoint

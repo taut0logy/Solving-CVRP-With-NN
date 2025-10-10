@@ -248,13 +248,11 @@ def load_all_benchmarks(benchmark_dir: str) -> Dict:
 
 
 if __name__ == "__main__":
-    # Test the parser
     benchmark_dir = "../benchmark_data"
     benchmarks = load_all_benchmarks(benchmark_dir)
     
     print(f"Successfully loaded {len(benchmarks)} benchmark instances")
     
-    # Show example conversion
     if benchmarks:
         example_name = list(benchmarks.keys())[0]
         example = benchmarks[example_name]

@@ -3,7 +3,6 @@ import sys
 import torch
 import matplotlib.pyplot as plt
 
-# Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from cvrp_training_pipeline import CVRPTrainer
@@ -77,7 +76,7 @@ def train_cvrp_model(epochs=30, batch_size=16):
     
     # Step 5: Test on some instances
     print("\n4. Testing Trained Model...")
-    test_trained_model(trainer)
+    test_cvrp_model(trainer)
     
     print("\n" + "=" * 60)
     print("Training Complete!")
@@ -117,7 +116,7 @@ def plot_training_progress(train_losses, val_distances):
     print("Training progress plot saved as 'training_progress.png'")
 
 
-def test_trained_model(trainer):
+def test_cvrp_model(trainer):
     """Test the trained model on some instances"""
     
     print("Testing model on validation instances...")
