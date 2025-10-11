@@ -349,7 +349,7 @@ class CVRPTrainer:
         # Simple greedy decoding
         routes = []
         current_route = []
-        current_load = instance.capacity
+        current_used_load = 0.0  # Track used capacity, not remaining
         visited = set()
         current_pos = 0
         
@@ -361,69 +361,103 @@ class CVRPTrainer:
         
         self.model.pre_forward(reset_state)
         
-        max_steps = instance.node_xy.shape[0] * 2
+        max_steps = instance.node_xy.shape[0] * 5  # Allow more steps for complex routing
+        n_customers = instance.node_xy.shape[0]
+        
         for step in range(max_steps):
-            if len(visited) == instance.node_xy.shape[0]:
+            # Check if all customers are visited
+            if len(visited) == n_customers:
                 break
+            
+            # Safety check: if we've visited all customers but still have a partial route
+            if len(visited) == n_customers and current_route:
+                routes.append(current_route)
+                break
+            
+            # Safety check: if no progress is being made (more lenient)
+            if step > 0 and step % 100 == 0:
+                if step > n_customers * 4 and len(visited) < n_customers * 0.8:
+                    self.logger.warning(f"Early termination at step {step}, visited {len(visited)}/{n_customers}")
+                    break
             
             # Create state
             device = self.device  # Capture device for inner class
             class TestState:
-                def __init__(self, selected_count, current_node, load_val, visited_set, n_nodes, demands, capacity):
+                def __init__(self, selected_count, current_node, used_load, visited_set, n_nodes, demands, capacity):
                     self.selected_count = selected_count
                     self.current_node = torch.tensor([[current_node]], device=device) 
-                    self.load = torch.tensor([[load_val / capacity]], device=device)
-                    self.ninf_mask = self._create_mask(visited_set, n_nodes, load_val, demands, capacity)
+                    # Normalize remaining capacity (1.0 = full capacity, 0.0 = no capacity)
+                    remaining_capacity = capacity - used_load
+                    self.load = torch.tensor([[remaining_capacity / capacity]], device=device)
+                    self.ninf_mask = self._create_mask(visited_set, n_nodes, used_load, demands, capacity)
                     self.BATCH_IDX = torch.tensor([[0]], device=device)
                     self.POMO_IDX = torch.tensor([[0]], device=device)
                     self.finished = torch.tensor([[False]], device=device)
                     self.device = device
                 
-                def _create_mask(self, visited_set, n_nodes, current_load, demands, capacity):
+                def _create_mask(self, visited_set, n_nodes, used_load, demands, capacity):
                     mask = torch.zeros(1, 1, n_nodes + 1, device=device)
+                    remaining_capacity = capacity - used_load
+                    
+                    # Always mask depot initially - it should only be selected when no customers are feasible
+                    mask[0, 0, 0] = float('-inf')
                     
                     # Mask visited nodes
                     for v in visited_set:
-                        mask[0, 0, v] = float('-inf')
+                        if v > 0:  # Don't mask depot here, handle separately
+                            mask[0, 0, v] = float('-inf')
                     
-                    # Mask nodes that exceed capacity
-                    for i in range(1, n_nodes + 1):
-                        if i not in visited_set and demands[i-1] > current_load:
-                            mask[0, 0, i] = float('-inf')
-                    
-                    # If no customers are feasible, allow depot
+                    # Mask nodes that exceed remaining capacity
                     feasible_customers = False
                     for i in range(1, n_nodes + 1):
-                        if mask[0, 0, i] != float('-inf'):
-                            feasible_customers = True
-                            break
+                        if i not in visited_set:
+                            if demands[i-1] <= remaining_capacity:
+                                feasible_customers = True
+                            else:
+                                mask[0, 0, i] = float('-inf')
                     
+                    # If no customers are feasible, allow depot (force return)
                     if not feasible_customers:
                         mask[0, 0, 0] = 0  # Allow depot
                     
                     return mask
             
-            state = TestState(step, current_pos, current_load, visited, 
+            state = TestState(step, current_pos, current_used_load, visited, 
                             instance.node_xy.shape[0], instance.demands, instance.capacity)
             
             # Get next node
             selected, _ = self.model(state)
             next_node = selected[0, 0].item()
             
-            if next_node == 0:  # Return to depot
+            if next_node == 0:  # Return to depot (internal index 0)
                 if current_route:
                     routes.append(current_route)
                     current_route = []
-                current_load = instance.capacity
-                current_pos = 0
+                current_used_load = 0.0  # Reset for new route
+                current_pos = 0  # Back to depot (internal index 0)
             else:
-                current_route.append(next_node)
-                visited.add(next_node)
-                current_load -= instance.demands[next_node - 1].item()
-                current_pos = next_node
+                # next_node is internal customer index (1 to n_customers)
+                # Demands are indexed 0-based, so use next_node-1
+                if 1 <= next_node <= n_customers and next_node - 1 < len(instance.demands):
+                    # Convert internal customer index to VRPLIB index: internal 1-N becomes VRPLIB 2-(N+1)
+                    vrplib_customer = next_node + 1
+                    current_route.append(vrplib_customer)
+                    visited.add(next_node)  # Track visits using internal indices
+                    current_used_load += instance.demands[next_node - 1].item()
+                    current_pos = next_node
+                else:
+                    # Invalid node selected, force return to depot
+                    if current_route:
+                        routes.append(current_route)
+                        current_route = []
+                    current_used_load = 0.0
+                    current_pos = 0
         
         if current_route:
             routes.append(current_route)
+        
+        # Validate and fix solution
+        routes = self._validate_and_fix_routes(routes, instance.demands, instance.capacity, n_customers)
         
         # Calculate total distance
         total_distance = 0.0
@@ -433,9 +467,13 @@ class CVRPTrainer:
             if not route:
                 continue
             
-            route_coords = [coords[0]]  # Start at depot
+            route_coords = [coords[0]]  # Start at depot (index 0)
             for customer in route:
-                route_coords.append(coords[customer])
+                # Convert VRPLIB customer index to internal coordinate index
+                # VRPLIB customer 2 -> coords[1], customer 3 -> coords[2], etc.
+                coord_idx = customer - 1
+                if coord_idx < len(coords):
+                    route_coords.append(coords[coord_idx])
             route_coords.append(coords[0])  # Return to depot
             
             # Calculate route distance
@@ -526,9 +564,14 @@ class CVRPTrainer:
                 continue
             color = colors[i % len(colors)]
             
-            # Create full route including depot
-            full_route = [0] + route + [0]  # Start and end at depot
-            route_coords = [coords[node] for node in full_route]
+            # Create full route including depot with proper coordinate indices
+            route_coords = [coords[0]]  # Start at depot (coord index 0)
+            for customer in route:
+                # Convert VRPLIB customer index to coordinate index
+                coord_idx = customer - 1  # VRPLIB customer 2 -> coord[1], customer 3 -> coord[2], etc.
+                if coord_idx < len(coords):
+                    route_coords.append(coords[coord_idx])
+            route_coords.append(coords[0])  # Return to depot
             
             # Plot route lines
             for j in range(len(route_coords) - 1):
@@ -566,9 +609,14 @@ class CVRPTrainer:
                 continue
             color = colors[i % len(colors)]
             
-            # Create full route including depot
-            full_route = [0] + route + [0]  # Start and end at depot
-            route_coords = [coords[node] for node in full_route]
+            # Create full route including depot with proper coordinate indices
+            route_coords = [coords[0]]  # Start at depot (coord index 0)
+            for customer in route:
+                # Convert VRPLIB customer index to coordinate index  
+                coord_idx = customer - 1  # VRPLIB customer 2 -> coord[1], customer 3 -> coord[2], etc.
+                if coord_idx < len(coords):
+                    route_coords.append(coords[coord_idx])
+            route_coords.append(coords[0])  # Return to depot
             
             # Plot route lines
             for j in range(len(route_coords) - 1):
@@ -675,6 +723,64 @@ class CVRPTrainer:
                     results[name] = {'error': str(e)}
         
         return results
+
+    def _validate_and_fix_routes(self, routes, demands, capacity, n_customers):
+        """Validate and fix route issues"""
+        valid_routes = []
+        visited_vrplib = set()
+        unvisited_vrplib = set(range(2, n_customers + 2))  # VRPLIB customer indices: 2 to N+1
+        
+        for route in routes:
+            # Remove duplicates and depot from middle
+            clean_route = []
+            route_load = 0
+            
+            for node in route:
+                if node == 1:  # Depot in VRPLIB format - skip, should not be in route
+                    continue
+                else:  # Customer in VRPLIB format (2 to N+1)
+                    if 2 <= node <= n_customers + 1 and node not in visited_vrplib:
+                        # Check capacity constraint (convert to 0-based demand index)
+                        demand_idx = node - 2  # VRPLIB node 2 -> demand[0], node 3 -> demand[1], etc.
+                        if demand_idx < len(demands) and route_load + demands[demand_idx] <= capacity:
+                            clean_route.append(node)
+                            visited_vrplib.add(node)
+                            unvisited_vrplib.discard(node)
+                            route_load += demands[demand_idx]
+                        else:
+                            # Start new route for this customer
+                            break
+            
+            # Add route if it has customers (no depot nodes needed)
+            if clean_route:
+                valid_routes.append(clean_route)
+        
+        # Add unvisited customers to new routes
+        while unvisited_vrplib:
+            route = []
+            route_load = 0
+            
+            customers_to_add = []
+            for customer in sorted(unvisited_vrplib):
+                # Convert VRPLIB customer to demand index
+                demand_idx = customer - 2
+                if demand_idx < len(demands) and route_load + demands[demand_idx] <= capacity:
+                    customers_to_add.append(customer)
+                    route_load += demands[demand_idx]
+                    if len(customers_to_add) >= 10:  # Limit route size
+                        break
+            
+            if customers_to_add:
+                route.extend(customers_to_add)
+                valid_routes.append(route)
+                for customer in customers_to_add:
+                    unvisited_vrplib.remove(customer)
+            else:
+                # Single customer route for remaining
+                customer = unvisited_vrplib.pop()
+                valid_routes.append([customer])
+        
+        return valid_routes
 
 
 def main():

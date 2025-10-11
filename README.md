@@ -415,11 +415,11 @@ Tested on four standard VRPLIB instances (results from `test_cvrp.py`):
 
 | Instance | Customers | Optimal Routes | Predicted Routes | Gap | Performance |
 |----------|-----------:|---------------:|-----------------:|-----:|-------------|
-| X-n120-k6 | 120 | 6 | 7 | -73.15% | Much better (lower distance) |
-| X-n125-k30 | 125 | 30 | 34 | -9.12% | Good |
-| X-n153-k22 | 153 | 23 | 29 | -50.99% | Much better (lower distance) |
-| X-n157-k13 | 157 | 13 | 24 | -52.48% | Much better (lower distance) |
-| **Average** | - | - | - | **-46.44%** | **Excellent** |
+| X-n120-k6 | 120 | 6 | 6 | -35.57% | Better |
+| X-n125-k30 | 125 | 30 | 33 | -9.16% | Good |
+| X-n153-k22 | 153 | 23 | 28 | -39.89% | Better |
+| X-n157-k13 | 157 | 13 | 13 | -59.75% | Much better (lower distance) |
+| **Average** | - | - | - | **-36.09%** | **Excellent** |
 
 ### Key Insights
 

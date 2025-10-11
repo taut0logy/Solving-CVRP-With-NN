@@ -12,3 +12,4 @@ __pycache__/
 trained_model/
 benchmark_test/
 training_progress.png
+predicted_*.txt
