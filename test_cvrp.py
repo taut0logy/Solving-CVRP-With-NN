@@ -1,6 +1,7 @@
 import os
 import sys
 import torch
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -9,30 +10,39 @@ from cvrp_benchmark_parser import CVRPBenchmarkParser
 
 def _save_instance_as_vrp(instance, filepath):
     """Save a CVRP instance in VRP format"""
-    coordinates = instance.node_xy.numpy()
-    demands = instance.demands.numpy()
+    # Get depot and customer coordinates
+    depot_coords = instance.depot_xy.numpy()  # shape: (1, 2)
+    customer_coords = instance.node_xy.numpy()  # shape: (n_customers, 2)
+    demands = instance.demands.numpy()  # shape: (n_customers,)
+    
     # Handle capacity whether it's a tensor or float
     if hasattr(instance.capacity, 'item'):
         capacity = int(instance.capacity.item())
     else:
         capacity = int(instance.capacity)
     
+    # Combine depot and customers: depot first, then customers
+    all_coords = np.vstack([depot_coords, customer_coords])  # shape: (1 + n_customers, 2)
+    
+    # Create demands array: depot has 0 demand, customers have their demands
+    all_demands = np.concatenate([[0], demands])  # depot demand = 0
+    
     with open(filepath, 'w') as f:
         f.write("NAME : sample_problem\n")
         f.write("COMMENT : Generated sample CVRP instance\n")
         f.write("TYPE : CVRP\n")
-        f.write(f"DIMENSION : {len(coordinates)}\n")
+        f.write(f"DIMENSION : {len(all_coords)}\n")  # Total nodes = depot + customers
         f.write("EDGE_WEIGHT_TYPE : EUC_2D\n")
         f.write(f"CAPACITY : {capacity}\n")
         f.write("NODE_COORD_SECTION\n")
         
         # Scale coordinates to 0-1000 range for standard VRP format
-        coords_scaled = coordinates * 1000
-        for i, (x, y) in enumerate(coords_scaled, 1):
+        coords_scaled = all_coords * 1000
+        for i, (x, y) in enumerate(coords_scaled, 1):  # 1-based indexing for VRPLIB
             f.write(f"{i} {x:.0f} {y:.0f}\n")
         
         f.write("DEMAND_SECTION\n")
-        for i, demand in enumerate(demands, 1):
+        for i, demand in enumerate(all_demands, 1):  # 1-based indexing for VRPLIB
             f.write(f"{i} {demand:.0f}\n")
         
         f.write("DEPOT_SECTION\n")
@@ -49,8 +59,10 @@ def _save_solution_file(routes, distance, filepath, problem_name="sample"):
         f.write(f"Number of Routes: {len(routes)}\n")
         f.write("Routes:\n")
         for i, route in enumerate(routes, 1):
+            # Convert to 0-based indexin
+            # route = [node - 1 for node in route]
             route_str = " -> ".join([str(node) for node in route])
-            f.write(f"Route {i}: Depot -> {route_str} -> Depot\n")
+            f.write(f"Route {i}: Depot -> {route_str} -> Depot\n")  # Depot is 0 in 0-based indexing
 
 
 def test_on_benchmarks(enable_plots=True, tabulate=False):
@@ -309,7 +321,7 @@ def test_on_benchmarks(enable_plots=True, tabulate=False):
     print(f"All files saved in: {output_dir}")
 
 
-def create_sample_instance():
+def test_on_sample_instance():
     """Create a sample CVRP instance for testing"""
     
     print("\n" + "=" * 60)
@@ -377,12 +389,16 @@ def create_sample_instance():
     print("\nSolving with neural network...")
     predicted_distance, predicted_routes = trainer._solve_instance_detailed(instance)
     gap = abs(predicted_distance - instance.optimal_distance) / instance.optimal_distance * 100
-    
+    optimal_routes = []
+    for route in instance.optimal_routes:
+        route = [node + 1 for node in route]
+        optimal_routes.append(route)
+
     predicted_solution_file = os.path.join(sample_dir, f"predicted_solution_{timestamp}.txt")
     _save_solution_file(predicted_routes, predicted_distance, predicted_solution_file, f"sample_{timestamp}")
     
     optimal_solution_file = os.path.join(sample_dir, f"optimal_solution_{timestamp}.txt")
-    _save_solution_file(instance.optimal_routes, instance.optimal_distance, optimal_solution_file, f"sample_{timestamp}_optimal")
+    _save_solution_file(optimal_routes, instance.optimal_distance, optimal_solution_file, f"sample_{timestamp}_optimal")
     
     comparison_file = os.path.join(sample_dir, f"comparison_{timestamp}.txt")
     with open(comparison_file, 'w') as f:
@@ -415,16 +431,24 @@ def create_sample_instance():
         
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
         
+        # Combine depot and customer coordinates for plotting
+        depot_coords = instance.depot_xy.numpy()  # shape: (1, 2)
+        customer_coords = instance.node_xy.numpy()  # shape: (n_customers, 2)
+        all_coordinates = np.vstack([depot_coords, customer_coords])  # depot first, then customers
+        
         # Plot optimal solution
-        coordinates = instance.node_xy.numpy()
-        ax1.scatter(coordinates[1:, 0], coordinates[1:, 1], c='blue', s=50, alpha=0.7, label='Customers')
-        ax1.scatter(coordinates[0, 0], coordinates[0, 1], c='red', s=100, marker='s', label='Depot')
+        ax1.scatter(all_coordinates[1:, 0], all_coordinates[1:, 1], c='blue', s=50, alpha=0.7, label='Customers')
+        ax1.scatter(all_coordinates[0, 0], all_coordinates[0, 1], c='red', s=100, marker='s', label='Depot')
         
         colors = ['green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
         for i, route in enumerate(instance.optimal_routes):
             color = colors[i % len(colors)]
-            # Optimal routes use 0-based indexing (internal format)
-            route_coords = [coordinates[0]] + [coordinates[node] for node in route] + [coordinates[0]]
+            # Optimal routes use VRPLIB customer indices (2-16), convert to coordinate array indices
+            route_coords = [all_coordinates[0]]  # Start at depot (index 0)
+            for node in route:
+                if 2 <= node <= len(all_coordinates):  # Valid VRPLIB customer range (2-16)
+                    route_coords.append(all_coordinates[node - 1])  # Convert VRPLIB to 0-based index
+            route_coords.append(all_coordinates[0])  # Return to depot
             route_x = [coord[0] for coord in route_coords]
             route_y = [coord[1] for coord in route_coords]
             ax1.plot(route_x, route_y, c=color, linewidth=2, alpha=0.7)
@@ -436,17 +460,17 @@ def create_sample_instance():
         ax1.grid(True, alpha=0.3)
         
         # Plot predicted solution
-        ax2.scatter(coordinates[1:, 0], coordinates[1:, 1], c='blue', s=50, alpha=0.7, label='Customers')
-        ax2.scatter(coordinates[0, 0], coordinates[0, 1], c='red', s=100, marker='s', label='Depot')
+        ax2.scatter(all_coordinates[1:, 0], all_coordinates[1:, 1], c='blue', s=50, alpha=0.7, label='Customers')
+        ax2.scatter(all_coordinates[0, 0], all_coordinates[0, 1], c='red', s=100, marker='s', label='Depot')
         
         for i, route in enumerate(predicted_routes):
             color = colors[i % len(colors)]
-            # Convert 1-based VRPLIB indices to 0-based for coordinate lookup
-            route_coords = [coordinates[0]]  # Start at depot
+            # Predicted routes use 1-based VRPLIB indices, convert to coordinate array indices
+            route_coords = [all_coordinates[0]]  # Start at depot (index 0)
             for node in route:
-                if node <= len(coordinates):
-                    route_coords.append(coordinates[node - 1])  # Convert to 0-based index
-            route_coords.append(coordinates[0])  # Return to depot
+                if 1 <= node <= len(all_coordinates):  # Valid VRPLIB node range
+                    route_coords.append(all_coordinates[node - 1])  # Convert 1-based to 0-based index
+            route_coords.append(all_coordinates[0])  # Return to depot
             route_x = [coord[0] for coord in route_coords]
             route_y = [coord[1] for coord in route_coords]
             ax2.plot(route_x, route_y, c=color, linewidth=2, alpha=0.7)
@@ -501,7 +525,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.sample:
-        create_sample_instance()
+        test_on_sample_instance()
     else:
         enable_plots = not args.no_plots
         test_on_benchmarks(enable_plots, tabulate=args.tabulate)

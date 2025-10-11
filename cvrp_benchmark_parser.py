@@ -97,7 +97,7 @@ class CVRPBenchmarkParser:
                     # Extract route
                     route_part = line.split(':', 1)[1].strip()
                     if route_part:
-                        route = [int(x) for x in route_part.split()]
+                        route = [int(x) + 1 for x in route_part.split()]
                         solution['routes'].append(route)
                 elif line.startswith('Cost'):
                     # Extract total cost if available
