@@ -656,18 +656,22 @@ class CVRPTrainer:
         
         self.logger.info(f"Solution comparison saved to {save_path}")
     
-    def test_on_benchmarks(self, benchmark_dir: str, save_plots: bool = True) -> Dict:
+    def test_on_benchmarks(self, benchmark_dir: str, save_plots: bool = True, output_dir: str = None) -> Dict:
         """Test trained model on benchmark instances"""
         self.logger.info(f"Testing on benchmarks from {benchmark_dir}")
         
         benchmarks = load_all_benchmarks(benchmark_dir)
         results = {}
         
-        # Create timestamped directory for saving plots
+        # Use provided output_dir or create timestamped directory for saving plots
         if save_plots:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            plot_dir = os.path.join("benchmark_test", timestamp)
-            os.makedirs(plot_dir, exist_ok=True)
+            if output_dir is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                plot_dir = os.path.join("benchmark_test", timestamp)
+                os.makedirs(plot_dir, exist_ok=True)
+            else:
+                plot_dir = output_dir
+                os.makedirs(plot_dir, exist_ok=True)
             self.logger.info(f"Saving plots to: {plot_dir}")
         
         self.model.eval()
